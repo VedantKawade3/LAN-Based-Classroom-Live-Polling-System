@@ -1,8 +1,22 @@
+import os
+import sys
 import tkinter as tk
 from tkinter import messagebox
 import socket
 import json
 
+# Ensure the project root directory is on sys.path so imports work whether
+# this file is executed as 'python -m server.teacher_gui' or 'python server/teacher_gui.py'.
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from common.protocol import ERROR, MESSAGE_DELIMITER
+
+# The teacher dashboard always talks to a server running on the teacher's
+# own machine (started separately via 'python -m server.server'), so
+# localhost is correct here -- it is not the "students connecting to
+# localhost" mistake the project avoids elsewhere.
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 5000
 
@@ -11,19 +25,34 @@ class TeacherDashboard:
         self.root = root
         self.root.title("CLASSROOM POLLING - TEACHER")
         self.root.geometry("450x550")
-        
+
         self.setup_ui()
         self.update_results()
-        
+
     def send_request(self, data):
-        """Send a JSON request to the server and return the response."""
+        """Send a JSON request to the server and return the parsed response.
+
+        Uses a short-lived connection framed with the same newline-delimited
+        JSON protocol as the student client (see common/protocol.py). Every
+        request must end with the delimiter and the response must be read
+        in a loop, since a single recv() call is not guaranteed to return a
+        complete message.
+        """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(2.0)  # Timeout so the GUI doesn't freeze
                 s.connect((SERVER_HOST, SERVER_PORT))
-                s.sendall(json.dumps(data).encode('utf-8'))
-                response = s.recv(4096).decode('utf-8')
-                return json.loads(response)
+                s.sendall((json.dumps(data) + MESSAGE_DELIMITER).encode('utf-8'))
+
+                buffer = ""
+                while MESSAGE_DELIMITER not in buffer:
+                    chunk = s.recv(4096)
+                    if not chunk:
+                        return None  # server closed the connection without responding
+                    buffer += chunk.decode('utf-8')
+
+                line, _ = buffer.split(MESSAGE_DELIMITER, 1)
+                return json.loads(line)
         except Exception:
             return None
             
@@ -73,22 +102,26 @@ class TeacherDashboard:
         }
         
         response = self.send_request(request)
-        if response:
-            messagebox.showinfo("Success", "Poll created successfully!")
-        else:
+        if response is None:
             messagebox.showerror("Connection Error", "Failed to connect to the server. Is it running?")
-            
+        elif response.get("type") == ERROR:
+            messagebox.showerror("Server Error", response.get("message", "Failed to create poll."))
+        else:
+            messagebox.showinfo("Success", "Poll created successfully!")
+
     def close_poll(self):
         request = {
             "type": "CLOSE_POLL"
         }
         response = self.send_request(request)
-        if response:
+        if response is None:
+            messagebox.showerror("Connection Error", "Failed to connect to the server. Is it running?")
+        elif response.get("type") == ERROR:
+            messagebox.showerror("Server Error", response.get("message", "Failed to close poll."))
+        else:
             messagebox.showinfo("Success", "Poll closed successfully!")
             # Clear results on the screen
             self.display_results({"results": {}, "total_votes": 0})
-        else:
-            messagebox.showerror("Connection Error", "Failed to connect to the server. Is it running?")
             
     def update_results(self):
         """Periodically ping the server for live results."""

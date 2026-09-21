@@ -1,0 +1,7 @@
+# This project intentionally uses only the Python standard library
+# (socket, threading, json, tkinter, uuid, logging, argparse, unittest).
+# No third-party packages are required.
+#
+# tkinter ships with most standard Python installations. On some Linux
+# distributions it is a separate OS package, e.g.:
+#   sudo apt install python3-tk
