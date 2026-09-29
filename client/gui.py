@@ -36,7 +36,7 @@ class StudentGUI:
 
         # State tracking
         self.current_poll = None
-        self.selected_option = tk.StringVar(value="")
+        self.selected_option = tk.StringVar(master=self.root, value="___NO_SELECTION___")
 
         # Intercept window close button (X) to ensure clean socket disconnect
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -321,7 +321,8 @@ class StudentGUI:
     def show_active_poll_screen(self, poll_data):
         """Builds Screen 2: Displays active poll question and options."""
         self._clear_content()
-        self.selected_option.set("")  # Reset chosen option
+        # Create a fresh StringVar for each poll to avoid tkinter variable unlinking issues
+        self.selected_option = tk.StringVar(master=self.root, value="___NO_SELECTION___")
 
         card = tk.Frame(self.content_container, bg="#FFFFFF", padx=25, pady=25, relief=tk.RIDGE, bd=1)
         card.pack(fill=tk.BOTH, expand=True, pady=10)
@@ -377,7 +378,8 @@ class StudentGUI:
                 bg="#F8FAFC",
                 activebackground="#F8FAFC",
                 highlightthickness=0,
-                cursor="hand2"
+                cursor="hand2",
+                tristatevalue="___NONE___"  # Explicitly prevent tri-state bugs
             )
             rb.pack(anchor="w")
 
@@ -445,7 +447,7 @@ class StudentGUI:
         chosen = self.selected_option.get().strip()
 
         # Constraint: Do not allow submission without selecting an option
-        if not chosen:
+        if chosen == "___NO_SELECTION___" or not chosen:
             self.poll_status_label.config(text="Please select one option before submitting.", fg="#DC2626")
             return
 
